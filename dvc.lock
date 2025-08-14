@@ -4,8 +4,8 @@ stages:
     cmd: python src/data/make_dataset.py
     deps:
     - path: params.yaml
-      md5: da33439c64e2510c9860e3ae45db404b
-      size: 3167
+      md5: af8a38b00ad54cc5867b16cde6d06574
+      size: 2962
     - path: src/data/make_dataset.py
       md5: 6a2c6f79ec24d6b414916b2ad7fc0b78
       size: 12153
@@ -27,8 +27,8 @@ stages:
       md5: 9fa21ce12d95fd2330af0b917e168705
       size: 129778
     - path: params.yaml
-      md5: da33439c64e2510c9860e3ae45db404b
-      size: 3167
+      md5: af8a38b00ad54cc5867b16cde6d06574
+      size: 2962
     - path: src/data/preprocessing.py
       md5: 2eb6207f5d9cc9206d0b41f4d288efec
       size: 19798
@@ -138,8 +138,8 @@ stages:
       md5: e86bde154d98df6708bc4abb79fbe800
       size: 9783
     - path: params.yaml
-      md5: da33439c64e2510c9860e3ae45db404b
-      size: 3167
+      md5: af8a38b00ad54cc5867b16cde6d06574
+      size: 2962
     - path: src/models/train_model.py
       md5: 75b3efffa255ff010536098c0b1c7e8b
       size: 16610
@@ -168,7 +168,7 @@ stages:
       md5: 4ee9619f92c54b7ce082b3c353ba82b2
       size: 333
     - path: models/experiments/catboost_v1/model.pkl
-      md5: d842e22467f66a905d882b689c6ff5d7
+      md5: c30b26628d462fce4c7a225246016cb3
       size: 25000
     - path: reports/figures/feature_importance.png
       md5: bf114948a8e874bb9ddf1d58794f57ec
@@ -183,11 +183,11 @@ stages:
       md5: f1e9af16b85e393230490998f4bab98d
       size: 19582
     - path: models/experiments/catboost_v1/model.pkl
-      md5: d842e22467f66a905d882b689c6ff5d7
+      md5: c30b26628d462fce4c7a225246016cb3
       size: 25000
     - path: params.yaml
-      md5: da33439c64e2510c9860e3ae45db404b
-      size: 3167
+      md5: af8a38b00ad54cc5867b16cde6d06574
+      size: 2962
     - path: src/evaluation/evaluate_model.py
       md5: 614e111aa52abb8969dea2cd28d7f796
       size: 17980

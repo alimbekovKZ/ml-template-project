@@ -8,7 +8,6 @@ paths:
   data_processed: "data/processed"
   data_features: "data/features"
   models_experiments: "models/experiments"
-  models_production: "models/production"
   reports_figures: "reports/figures"
   reports_metrics: "reports/metrics"
   configs: "configs"
@@ -108,13 +107,6 @@ evaluation:
     - "feature_importance"
     - "shap_summary"
 
-# Параметры продвижения в продакшн
-promotion:
-  min_accuracy: 0.75
-  min_precision: 0.70
-  min_recall: 0.65
-  min_auc: 0.80
-  
 # Параметры логирования
 logging:
   level: "INFO"

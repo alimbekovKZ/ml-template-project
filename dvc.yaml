@@ -95,18 +95,3 @@ stages:
           cache: false
 
 
-  # Этап для переноса лучшей модели в продакшн
-  promote_model:
-    cmd: python scripts/promote_best_model.py
-    deps:
-      - scripts/promote_best_model.py
-      # Using the MLflow API is more robust than a direct dependency on the database file.
-    outs:
-      - models/production/model.pkl
-      - models/production/model_metadata.json
-    params:
-      - promotion.min_accuracy
-      - promotion.min_precision
-      - promotion.min_recall
-      - promotion.min_auc
-      - mlflow.enabled

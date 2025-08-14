@@ -164,8 +164,6 @@ data/features/*
 # Models directory (except configs)
 models/experiments/*
 !models/experiments/.gitkeep
-models/production/*
-!models/production/.gitkeep
 models/*.pkl
 models/*.joblib
 models/*.model
