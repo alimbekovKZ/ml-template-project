@@ -57,7 +57,7 @@ data:
   date_column: "date"
 
 model:
-  type: "lightgbm"  # lightgbm, catboost, xgboost
+  type: "catboost"  # catboost, xgboost
   hyperparameters:
     objective: "binary"
     metric: "auc"
@@ -66,7 +66,6 @@ model:
 
 ### Поддерживаемые модели
 
-- **LightGBM**: Быстрый градиентный бустинг
 - **CatBoost**: Автоматическая работа с категориальными признаками
 - **XGBoost**: Классический градиентный бустинг
 
@@ -163,13 +162,11 @@ mlflow ui --host 0.0.0.0 --port 5000
 Откройте http://localhost:5000 для просмотра экспериментов.
 
 ### Сравнение экспериментов
-```bash
-# Сравнение всех экспериментов
-make mlflow-compare
 
-# Или напрямую
-python scripts/compare_experiments.py
-```
+Используйте MLflow UI для сравнения экспериментов:
+- Откройте http://127.0.0.1:5000/#/experiments/
+- Выберите несколько runs для сравнения
+- Просматривайте метрики, параметры и артефакты
 
 ### Model Registry и продакшн
 

@@ -53,7 +53,18 @@ class ModelEvaluator:
         test_df = pd.read_csv("data/features/test_features.csv", index_col=0)
         
         target_col = self.config['data']['target_column']
-        X_test = test_df.drop(columns=[target_col])
+        date_col = self.config['data']['date_column']
+        
+        # Колонки для исключения (целевая переменная, дата, id колонки)
+        columns_to_exclude = [target_col]
+        if date_col in test_df.columns:
+            columns_to_exclude.append(date_col)
+        
+        # Исключаем ID колонки если они есть
+        id_columns = [col for col in test_df.columns if 'customer' in col.lower() or 'id' in col.lower()]
+        columns_to_exclude.extend(id_columns)
+        
+        X_test = test_df.drop(columns=columns_to_exclude)
         y_test = test_df[target_col]
         
         self.logger.info(f"Модель загружена: {model_path}")

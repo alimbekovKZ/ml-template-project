@@ -68,7 +68,7 @@ def get_model_config(model_type: str) -> Dict[str, Any]:
     Загрузка конфигурации для конкретного типа модели.
     
     Args:
-        model_type: Тип модели (lightgbm, catboost, xgboost)
+        model_type: Тип модели (catboost, xgboost)
         
     Returns:
         Конфигурация модели
@@ -112,7 +112,7 @@ def validate_config(config: Dict[str, Any]) -> bool:
     if 'type' not in model_config:
         raise ValueError("Не указан тип модели")
     
-    supported_models = ['lightgbm', 'catboost', 'xgboost']
+    supported_models = ['catboost', 'xgboost']
     if model_config['type'] not in supported_models:
         raise ValueError(f"Неподдерживаемый тип модели: {model_config['type']}. "
                         f"Поддерживаемые: {supported_models}")

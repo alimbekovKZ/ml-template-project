@@ -4,8 +4,8 @@ stages:
     cmd: python src/data/make_dataset.py
     deps:
     - path: params.yaml
-      md5: e624d4019533bf4455e2292a9008b073
-      size: 3342
+      md5: da33439c64e2510c9860e3ae45db404b
+      size: 3167
     - path: src/data/make_dataset.py
       md5: 6a2c6f79ec24d6b414916b2ad7fc0b78
       size: 12153
@@ -27,8 +27,8 @@ stages:
       md5: 9fa21ce12d95fd2330af0b917e168705
       size: 129778
     - path: params.yaml
-      md5: e624d4019533bf4455e2292a9008b073
-      size: 3342
+      md5: da33439c64e2510c9860e3ae45db404b
+      size: 3167
     - path: src/data/preprocessing.py
       md5: 2eb6207f5d9cc9206d0b41f4d288efec
       size: 19798
@@ -123,5 +123,101 @@ stages:
       md5: e7cf77a672748f2feccadbd4961f65c5
       size: 108
     - path: models/production/model_metadata.json
-      md5: 07aa87eddae63937b855bc98df364500
+      md5: c3f83398d2709b64e46dc01fb6cae6b7
       size: 585
+  train_model:
+    cmd: python src/models/train_model.py
+    deps:
+    - path: data/features/feature_metadata.json
+      md5: 616d3fb660203aaa2f1b11f3c333d5e7
+      size: 814
+    - path: data/features/train_features.csv
+      md5: d1ae6cbdc90eb62d2c9504312ebb7a12
+      size: 67280
+    - path: data/features/validation_features.csv
+      md5: e86bde154d98df6708bc4abb79fbe800
+      size: 9783
+    - path: params.yaml
+      md5: da33439c64e2510c9860e3ae45db404b
+      size: 3167
+    - path: src/models/train_model.py
+      md5: 75b3efffa255ff010536098c0b1c7e8b
+      size: 16610
+    params:
+      params.yaml:
+        experiment_name: catboost_v1
+        mlflow.enabled: true
+        mlflow.experiment_name: ml_template_project
+        model:
+          type: catboost
+          hyperparameters:
+            catboost:
+              iterations: 1000
+              learning_rate: 0.1
+              verbose: 100
+            xgboost:
+              n_estimators: 1000
+              learning_rate: 0.1
+              max_depth: 6
+              verbosity: 0
+        training.cv_folds: 5
+        training.early_stopping: 100
+        training.epochs: 1000
+    outs:
+    - path: models/experiments/catboost_v1/feature_importance.csv
+      md5: 4ee9619f92c54b7ce082b3c353ba82b2
+      size: 333
+    - path: models/experiments/catboost_v1/model.pkl
+      md5: d842e22467f66a905d882b689c6ff5d7
+      size: 25000
+    - path: reports/figures/feature_importance.png
+      md5: bf114948a8e874bb9ddf1d58794f57ec
+      size: 114652
+    - path: reports/metrics/train_metrics.json
+      md5: 4c9d72759342683838021c5ce07634ab
+      size: 607
+  evaluate_model:
+    cmd: python src/evaluation/evaluate_model.py
+    deps:
+    - path: data/features/test_features.csv
+      md5: f1e9af16b85e393230490998f4bab98d
+      size: 19582
+    - path: models/experiments/catboost_v1/model.pkl
+      md5: d842e22467f66a905d882b689c6ff5d7
+      size: 25000
+    - path: params.yaml
+      md5: da33439c64e2510c9860e3ae45db404b
+      size: 3167
+    - path: src/evaluation/evaluate_model.py
+      md5: 614e111aa52abb8969dea2cd28d7f796
+      size: 17980
+    params:
+      params.yaml:
+        evaluation.thresholds:
+          default: 0.5
+          optimal_metric: f1
+        experiment_name: catboost_v1
+        mlflow.enabled: true
+    outs:
+    - path: reports/figures/confusion_matrix.png
+      md5: b0d3e495e84f4c48f54b055381a61465
+      size: 77438
+    - path: reports/figures/precision_recall_curve.png
+      md5: 32d43999819543a9ff78f584a35d1b93
+      size: 96051
+    - path: reports/figures/roc_curve.png
+      md5: 4d56168eab7e9a2c122821aea15f28f7
+      size: 136731
+    - path: reports/figures/threshold_analysis.png
+      md5: 42220a4eadc673addc6bd06fc4d537f9
+      size: 212180
+    - path: reports/metrics/test_metrics.json
+      md5: 23510dd0aa5f19af1ab774fd516ce783
+      size: 1577
+  full_pipeline_with_mlflow:
+    cmd: "echo \"Запуск полного ML пайплайна с MLflow трекингом...\"\ndvc repro evaluate_model\n\
+      python scripts/compare_experiments.py\necho \"Пайплайн завершен. Проверьте MLflow\
+      \ UI для детального анализа.\"\n"
+    params:
+      params.yaml:
+        mlflow.enabled: true

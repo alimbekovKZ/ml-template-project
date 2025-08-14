@@ -153,7 +153,6 @@ def configure_external_loggers(level: str = "WARNING"):
         'PIL',
         'asyncio',
         'mlflow',
-        'lightgbm',
         'catboost',
         'xgboost'
     ]

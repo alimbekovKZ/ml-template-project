@@ -9,7 +9,6 @@ import tempfile
 from typing import Dict, Any, Optional
 import mlflow
 import mlflow.sklearn
-import mlflow.lightgbm
 import mlflow.catboost
 import mlflow.xgboost
 from mlflow.tracking import MlflowClient
@@ -35,13 +34,50 @@ class MLflowTracker:
             mlflow.set_tracking_uri(tracking_uri)
             
             experiment_name = config.get('mlflow', {}).get('experiment_name', 'default')
+            
+            # Check if there's a stored experiment name from a previous run
+            experiment_file = ".mlflow_experiment_name"
+            if os.path.exists(experiment_file):
+                with open(experiment_file, 'r') as f:
+                    stored_name = f.read().strip()
+                    # Check if the stored experiment exists and is active
+                    stored_exp = mlflow.get_experiment_by_name(stored_name)
+                    if stored_exp and stored_exp.lifecycle_stage == 'active':
+                        experiment_name = stored_name
+            
             try:
                 experiment = mlflow.get_experiment_by_name(experiment_name)
                 if experiment is None:
+                    # Create new experiment if it doesn't exist
                     experiment_id = mlflow.create_experiment(experiment_name)
                     self.logger.info(f"Создан новый эксперимент: {experiment_name}")
+                    # Store the experiment name for future use
+                    with open(experiment_file, 'w') as f:
+                        f.write(experiment_name)
+                elif experiment.lifecycle_stage == 'deleted':
+                    # Try to restore deleted experiment
+                    try:
+                        self.client.restore_experiment(experiment.experiment_id)
+                        experiment_id = experiment.experiment_id
+                        self.logger.info(f"Восстановлен эксперимент: {experiment_name}")
+                        # Store the experiment name for future use
+                        with open(experiment_file, 'w') as f:
+                            f.write(experiment_name)
+                    except Exception:
+                        # If restore fails, create with different name
+                        import time
+                        new_name = f"{experiment_name}_{int(time.time())}"
+                        experiment_id = mlflow.create_experiment(new_name)
+                        experiment_name = new_name
+                        self.logger.info(f"Создан новый эксперимент с именем: {experiment_name}")
+                        # Store the new experiment name for future use
+                        with open(experiment_file, 'w') as f:
+                            f.write(experiment_name)
                 else:
                     experiment_id = experiment.experiment_id
+                    # Store the experiment name for future use
+                    with open(experiment_file, 'w') as f:
+                        f.write(experiment_name)
                     
                 mlflow.set_experiment(experiment_name)
                 self.experiment_id = experiment_id
@@ -108,13 +144,7 @@ class MLflowTracker:
             return
             
         try:
-            if model_type.lower() == 'lightgbm':
-                mlflow.lightgbm.log_model(
-                    model, artifact_path, 
-                    signature=signature, 
-                    input_example=input_example
-                )
-            elif model_type.lower() == 'catboost':
+            if model_type.lower() == 'catboost':
                 mlflow.catboost.log_model(
                     model, artifact_path,
                     signature=signature,
@@ -287,27 +317,20 @@ def setup_mlflow_autolog(model_type: str, disable_existing: bool = True):
     """Настройка автоматического логирования для разных типов моделей"""
     if disable_existing:
         mlflow.sklearn.autolog(disable=True)
-        mlflow.lightgbm.autolog(disable=True)
-        if hasattr(mlflow, 'catboost'):
+        if hasattr(mlflow.catboost, 'autolog'):
             mlflow.catboost.autolog(disable=True)
-        if hasattr(mlflow, 'xgboost'):
+        if hasattr(mlflow.xgboost, 'autolog'):
             mlflow.xgboost.autolog(disable=True)
     
-    if model_type.lower() == 'lightgbm':
-        mlflow.lightgbm.autolog(
-            log_input_examples=True,
-            log_model_signatures=True,
-            log_models=True
-        )
-    elif model_type.lower() == 'catboost':
-        if hasattr(mlflow, 'catboost'):
+    if model_type.lower() == 'catboost':
+        if hasattr(mlflow.catboost, 'autolog'):
             mlflow.catboost.autolog(
                 log_input_examples=True,
                 log_model_signatures=True,
                 log_models=True
             )
     elif model_type.lower() == 'xgboost':
-        if hasattr(mlflow, 'xgboost'):
+        if hasattr(mlflow.xgboost, 'autolog'):
             mlflow.xgboost.autolog(
                 log_input_examples=True,
                 log_model_signatures=True,

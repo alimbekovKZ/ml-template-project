@@ -94,26 +94,13 @@ stages:
       - reports/figures/threshold_analysis.png:
           cache: false
 
-  # Дополнительный этап для сравнения экспериментов
-  compare_experiments:
-    cmd: python scripts/compare_experiments.py
-    deps:
-      - scripts/compare_experiments.py
-      # It's better to query MLflow via its API using tracking_uri from params.yaml
-      # rather than depending on the local db file directly.
-    outs:
-      - reports/experiments_comparison.csv
-    params:
-      - mlflow.enabled
-      - mlflow.experiment_name
 
   # Этап для переноса лучшей модели в продакшн
   promote_model:
     cmd: python scripts/promote_best_model.py
     deps:
       - scripts/promote_best_model.py
-      # Similar to compare_experiments, using the MLflow API is more robust
-      # than a direct dependency on the database file.
+      # Using the MLflow API is more robust than a direct dependency on the database file.
     outs:
       - models/production/model.pkl
       - models/production/model_metadata.json
@@ -122,14 +109,4 @@ stages:
       - promotion.min_precision
       - promotion.min_recall
       - promotion.min_auc
-      - mlflow.enabled
-
-# Мета-пайплайн для полного цикла с MLflow
-  full_pipeline_with_mlflow:
-    cmd: |
-      echo "Запуск полного ML пайплайна с MLflow трекингом..."
-      dvc repro evaluate_model
-      python scripts/compare_experiments.py
-      echo "Пайплайн завершен. Проверьте MLflow UI для детального анализа."
-    params:
       - mlflow.enabled

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Скрипт для обучения модели машинного обучения.
-Поддерживает LightGBM, CatBoost и XGBoost.
+Поддерживает CatBoost и XGBoost.
 """
 
 import os
@@ -16,18 +16,21 @@ from typing import Dict, Any, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
-try:
-    import lightgbm as lgb
-except ImportError:
-    lgb = None
+# Импорты для моделей ML (с обработкой ошибок)
+cb = None
+xgb = None
+
 try:
     import catboost as cb
+    print("CatBoost успешно импортирован")
 except ImportError:
-    cb = None
+    print("CatBoost не установлен")
+
 try:
     import xgboost as xgb
+    print("XGBoost успешно импортирован")
 except ImportError:
-    xgb = None
+    print("XGBoost не установлен")
 
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
@@ -55,19 +58,23 @@ class ModelTrainer:
         if config.get('mlflow', {}).get('enabled', True):
             setup_mlflow_autolog(config['model']['type'])
         
-    def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
         """Загрузка обработанных данных"""
         train_path = "data/features/train_features.csv"
         val_path = "data/features/validation_features.csv"
         
         self.logger.info(f"Загрузка данных из {train_path} и {val_path}")
         
-        train_df = pd.read_csv(train_path)
-        val_df = pd.read_csv(val_path)
+        train_df = pd.read_csv(train_path, index_col=0)
+        val_df = pd.read_csv(val_path, index_col=0)
         
         # Загрузка метаданных о признаках
-        with open("data/features/feature_metadata.json", 'r') as f:
-            feature_metadata = json.load(f)
+        try:
+            with open("data/features/feature_metadata.json", 'r') as f:
+                feature_metadata = json.load(f)
+        except FileNotFoundError:
+            self.logger.warning("Метаданные признаков не найдены")
+            feature_metadata = {}
             
         self.logger.info(f"Размер обучающей выборки: {train_df.shape}")
         self.logger.info(f"Размер валидационной выборки: {val_df.shape}")
@@ -77,13 +84,24 @@ class ModelTrainer:
     def prepare_data(self, train_df: pd.DataFrame, val_df: pd.DataFrame) -> Tuple:
         """Подготовка данных для обучения"""
         target_col = self.config['data']['target_column']
+        date_col = self.config['data']['date_column']
+        
+        # Колонки для исключения (целевая переменная, дата, id колонки)
+        columns_to_exclude = [target_col]
+        if date_col in train_df.columns:
+            columns_to_exclude.append(date_col)
+        
+        # Исключаем ID колонки если они есть
+        id_columns = [col for col in train_df.columns if 'customer' in col.lower() or 'id' in col.lower()]
+        columns_to_exclude.extend(id_columns)
         
         # Разделение на признаки и целевую переменную
-        X_train = train_df.drop(columns=[target_col])
+        X_train = train_df.drop(columns=columns_to_exclude)
         y_train = train_df[target_col]
-        X_val = val_df.drop(columns=[target_col])
+        X_val = val_df.drop(columns=columns_to_exclude)
         y_val = val_df[target_col]
         
+        self.logger.info(f"Исключенные колонки: {columns_to_exclude}")
         self.logger.info(f"Количество признаков: {X_train.shape[1]}")
         self.logger.info(f"Распределение целевой переменной в train: {y_train.value_counts(normalize=True).to_dict()}")
         
@@ -92,23 +110,34 @@ class ModelTrainer:
     def create_model(self) -> Any:
         """Создание модели в зависимости от типа"""
         model_type = self.config['model']['type'].lower()
-        all_params = self.config['model']['hyperparameters']
         
-        # Получаем параметры для конкретного типа модели
-        params = all_params.get(model_type, {})
+        # Получаем параметры для конкретного типа модели из hyperparameters
+        hyperparams = self.config['model']['hyperparameters']
         
-        if model_type == 'lightgbm':
-            if lgb is None:
-                raise ImportError("LightGBM не установлен или не может быть импортирован")
-            model = lgb.LGBMClassifier(**params, random_state=self.config['random_seed'])
-        elif model_type == 'catboost':
+        if model_type == 'catboost':
             if cb is None:
                 raise ImportError("CatBoost не установлен")
-            model = cb.CatBoostClassifier(**params, random_state=self.config['random_seed'], verbose=False)
+            
+            # Для CatBoost берем параметры напрямую из hyperparameters
+            params = hyperparams.get('catboost', hyperparams)
+            
+            # Добавляем случайное состояние
+            params = params.copy()
+            params['random_state'] = self.config['random_seed']
+            
+            model = cb.CatBoostClassifier(**params)
+            
+            
         elif model_type == 'xgboost':
             if xgb is None:
                 raise ImportError("XGBoost не установлен")
-            model = xgb.XGBClassifier(**params, random_state=self.config['random_seed'])
+            
+            params = hyperparams.get('xgboost', hyperparams)
+            params = params.copy()
+            params['random_state'] = self.config['random_seed']
+            
+            model = xgb.XGBClassifier(**params)
+            
         else:
             raise ValueError(f"Неподдерживаемый тип модели: {model_type}")
             
@@ -168,15 +197,18 @@ class ModelTrainer:
             self.mlflow_tracker.log_metrics(cv_metrics, step=0)
             
             # Обучение на полной обучающей выборке
-            if self.config['model']['type'].lower() == 'lightgbm' and lgb is not None:
-                # Для LightGBM используем early stopping
+            model_type = self.config['model']['type'].lower()
+            
+            if model_type == 'catboost' and cb is not None:
+                # Для CatBoost используем eval_set и early stopping
                 self.model.fit(
                     X_train, y_train,
-                    eval_set=[(X_val, y_val)],
-                    eval_metric='auc',
-                    callbacks=[lgb.early_stopping(self.config['training']['early_stopping'])]
+                    eval_set=(X_val, y_val),
+                    early_stopping_rounds=self.config['training']['early_stopping'],
+                    verbose=False
                 )
             else:
+                # Для остальных моделей обычное обучение
                 self.model.fit(X_train, y_train)
             
             # Предсказания
@@ -233,7 +265,6 @@ class ModelTrainer:
             self.mlflow_tracker.end_run(status="FAILED")
             raise
     
-    
     def calculate_metrics(self, y_true: pd.Series, y_pred_proba: np.ndarray) -> Dict[str, float]:
         """Расчет метрик качества"""
         threshold = self.config['evaluation']['thresholds']['default']
@@ -241,9 +272,9 @@ class ModelTrainer:
         
         return {
             'accuracy': accuracy_score(y_true, y_pred),
-            'precision': precision_score(y_true, y_pred),
-            'recall': recall_score(y_true, y_pred),
-            'f1': f1_score(y_true, y_pred),
+            'precision': precision_score(y_true, y_pred, zero_division=0),
+            'recall': recall_score(y_true, y_pred, zero_division=0),
+            'f1': f1_score(y_true, y_pred, zero_division=0),
             'auc': roc_auc_score(y_true, y_pred_proba)
         }
     
@@ -310,6 +341,8 @@ def main():
     # Загрузка конфигурации
     config = load_config()
     
+    print(f"Тип модели для обучения: {config['model']['type']}")
+    
     # Создание тренера
     trainer = ModelTrainer(config)
     
@@ -326,7 +359,7 @@ def main():
         # Сохранение метрик
         os.makedirs("reports/metrics", exist_ok=True)
         with open("reports/metrics/train_metrics.json", 'w') as f:
-            json.dump(metrics, f, indent=2)
+            json.dump(metrics, f, indent=2, default=str)
         
         # Визуализация
         trainer.plot_feature_importance()
@@ -346,6 +379,7 @@ def main():
         print(f"Validation AUC: {metrics['validation']['auc']:.4f}")
         
     except Exception as e:
+        print(f"Ошибка при обучении модели: {e}")
         # В случае ошибки завершаем run с ошибкой
         if hasattr(trainer, 'mlflow_tracker'):
             trainer.mlflow_tracker.end_run(status="FAILED")
