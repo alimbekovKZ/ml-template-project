@@ -1,0 +1,127 @@
+schema: '2.0'
+stages:
+  load_data:
+    cmd: python src/data/make_dataset.py
+    deps:
+    - path: params.yaml
+      md5: e624d4019533bf4455e2292a9008b073
+      size: 3342
+    - path: src/data/make_dataset.py
+      md5: 6a2c6f79ec24d6b414916b2ad7fc0b78
+      size: 12153
+    params:
+      params.yaml:
+        data.filters:
+          min_disbursement: 500
+          max_date: '2024-07-31'
+          min_age: 18
+        data.source_path: data/external/raw_data.csv
+    outs:
+    - path: data/raw/dataset.csv
+      md5: 9fa21ce12d95fd2330af0b917e168705
+      size: 129778
+  preprocess_data:
+    cmd: python src/data/preprocessing.py
+    deps:
+    - path: data/raw/dataset.csv
+      md5: 9fa21ce12d95fd2330af0b917e168705
+      size: 129778
+    - path: params.yaml
+      md5: e624d4019533bf4455e2292a9008b073
+      size: 3342
+    - path: src/data/preprocessing.py
+      md5: 2eb6207f5d9cc9206d0b41f4d288efec
+      size: 19798
+    params:
+      params.yaml:
+        preprocessing.date_column: the_date
+        preprocessing.target_column: target
+        preprocessing.test_size: 0.2
+        preprocessing.val_size: 0.1
+    outs:
+    - path: data/processed/test.csv
+      md5: 0c19786c8fc450c0d582eb1aa6933918
+      size: 12491
+    - path: data/processed/train.csv
+      md5: 10d6f1ac11e3b1143973230bb732d09a
+      size: 42699
+    - path: data/processed/validation.csv
+      md5: 7c8e10d9484ba9af612a0d67b9e894c3
+      size: 6182
+  compare_experiments:
+    cmd: python scripts/compare_experiments.py
+    deps:
+    - path: scripts/compare_experiments.py
+      md5: fcf372053f9379eb58281857341b4077
+      size: 8029
+    params:
+      params.yaml:
+        mlflow.enabled: true
+        mlflow.experiment_name: ml_template_project
+    outs:
+    - path: reports/experiments_comparison.csv
+      md5: 7c110be2fc926236c89927c6f99f62ed
+      size: 145
+  feature_engineering:
+    cmd: python src/features/build_features.py
+    deps:
+    - path: data/processed/test.csv
+      md5: 0c19786c8fc450c0d582eb1aa6933918
+      size: 12491
+    - path: data/processed/train.csv
+      md5: 10d6f1ac11e3b1143973230bb732d09a
+      size: 42699
+    - path: data/processed/validation.csv
+      md5: 7c8e10d9484ba9af612a0d67b9e894c3
+      size: 6182
+    - path: src/features/build_features.py
+      md5: d7212b5f6fc4189f4154ee44c0b22a01
+      size: 16701
+    params:
+      params.yaml:
+        features.categorical_encoding:
+          method: frequency
+          cumsum_freq: 0.995
+          handle_unknown: ignore
+        features.feature_selection:
+          enabled: true
+          method: importance
+          top_k: 100
+        features.numerical_scaling:
+          method: standard
+    outs:
+    - path: data/features/feature_metadata.json
+      md5: 616d3fb660203aaa2f1b11f3c333d5e7
+      size: 814
+    - path: data/features/sklearn_objects.pkl
+      md5: 40bc10bd110c9eea8c48f0a0945aaa6c
+      size: 1020
+    - path: data/features/test_features.csv
+      md5: f1e9af16b85e393230490998f4bab98d
+      size: 19582
+    - path: data/features/train_features.csv
+      md5: d1ae6cbdc90eb62d2c9504312ebb7a12
+      size: 67280
+    - path: data/features/validation_features.csv
+      md5: e86bde154d98df6708bc4abb79fbe800
+      size: 9783
+  promote_model:
+    cmd: python scripts/promote_best_model.py
+    deps:
+    - path: scripts/promote_best_model.py
+      md5: ba0cd70f087215520fbdaba649a7b187
+      size: 13593
+    params:
+      params.yaml:
+        mlflow.enabled: true
+        promotion.min_accuracy: 0.75
+        promotion.min_auc: 0.8
+        promotion.min_precision: 0.7
+        promotion.min_recall: 0.65
+    outs:
+    - path: models/production/model.pkl
+      md5: e7cf77a672748f2feccadbd4961f65c5
+      size: 108
+    - path: models/production/model_metadata.json
+      md5: 07aa87eddae63937b855bc98df364500
+      size: 585

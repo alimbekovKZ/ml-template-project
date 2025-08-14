@@ -1,0 +1,135 @@
+stages:
+  load_data:
+    cmd: python src/data/make_dataset.py
+    deps:
+      - src/data/make_dataset.py
+      - params.yaml
+    outs:
+      - data/raw/dataset.csv
+    params:
+      - data.source_path
+      - data.filters
+
+  preprocess_data:
+    cmd: python src/data/preprocessing.py
+    deps:
+      - src/data/preprocessing.py
+      - data/raw/dataset.csv
+      - params.yaml
+    outs:
+      - data/processed/train.csv
+      - data/processed/validation.csv
+      - data/processed/test.csv
+    params:
+      - preprocessing.test_size
+      - preprocessing.val_size
+      - preprocessing.date_column
+      - preprocessing.target_column
+
+  feature_engineering:
+    cmd: python src/features/build_features.py
+    deps:
+      - src/features/build_features.py
+      - data/processed/train.csv
+      - data/processed/validation.csv
+      - data/processed/test.csv
+    outs:
+      - data/features/train_features.csv
+      - data/features/validation_features.csv
+      - data/features/test_features.csv
+      - data/features/feature_metadata.json
+      - data/features/sklearn_objects.pkl
+    params:
+      - features.categorical_encoding
+      - features.numerical_scaling
+      - features.feature_selection
+
+  train_model:
+    cmd: python src/models/train_model.py
+    deps:
+      - src/models/train_model.py
+      - data/features/train_features.csv
+      - data/features/validation_features.csv
+      - data/features/feature_metadata.json # Metadata can contain info used in training
+      - params.yaml
+    outs:
+      - models/experiments/${experiment_name}/model.pkl
+      - models/experiments/${experiment_name}/feature_importance.csv
+    params:
+      - experiment_name
+      - model # Pass the whole model block to support nested hyperparameters
+      - training.epochs
+      - training.early_stopping
+      - training.cv_folds
+      - mlflow.enabled
+      - mlflow.experiment_name
+    metrics:
+      - reports/metrics/train_metrics.json:
+          cache: false
+    plots:
+      - reports/figures/feature_importance.png:
+          cache: false
+
+  evaluate_model:
+    cmd: python src/evaluation/evaluate_model.py
+    deps:
+      - src/evaluation/evaluate_model.py
+      - models/experiments/${experiment_name}/model.pkl
+      - data/features/test_features.csv
+      - params.yaml
+    params:
+      - experiment_name
+      - evaluation.thresholds
+      - mlflow.enabled
+    metrics:
+      - reports/metrics/test_metrics.json:
+          cache: false
+    plots:
+      - reports/figures/confusion_matrix.png:
+          cache: false
+      - reports/figures/roc_curve.png:
+          cache: false
+      - reports/figures/precision_recall_curve.png:
+          cache: false
+      - reports/figures/threshold_analysis.png:
+          cache: false
+
+  # Дополнительный этап для сравнения экспериментов
+  compare_experiments:
+    cmd: python scripts/compare_experiments.py
+    deps:
+      - scripts/compare_experiments.py
+      # It's better to query MLflow via its API using tracking_uri from params.yaml
+      # rather than depending on the local db file directly.
+    outs:
+      - reports/experiments_comparison.csv
+    params:
+      - mlflow.enabled
+      - mlflow.experiment_name
+
+  # Этап для переноса лучшей модели в продакшн
+  promote_model:
+    cmd: python scripts/promote_best_model.py
+    deps:
+      - scripts/promote_best_model.py
+      # Similar to compare_experiments, using the MLflow API is more robust
+      # than a direct dependency on the database file.
+    outs:
+      - models/production/model.pkl
+      - models/production/model_metadata.json
+    params:
+      - promotion.min_accuracy
+      - promotion.min_precision
+      - promotion.min_recall
+      - promotion.min_auc
+      - mlflow.enabled
+
+# Мета-пайплайн для полного цикла с MLflow
+  full_pipeline_with_mlflow:
+    cmd: |
+      echo "Запуск полного ML пайплайна с MLflow трекингом..."
+      dvc repro evaluate_model
+      python scripts/compare_experiments.py
+      echo "Пайплайн завершен. Проверьте MLflow UI для детального анализа."
+    params:
+      - mlflow.enabled

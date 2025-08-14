@@ -1,0 +1,29 @@
+# Основная конфигурация проекта
+# Наследует параметры из params.yaml и может их переопределять
+
+project:
+  name: "ml-template-project"
+  version: "1.0.0"
+  description: "ML Template Project with DVC and MLflow"
+
+# Переопределения для разработки
+development:
+  data:
+    sample_size: 1000  # Меньший размер данных для быстрой разработки
+  
+  training:
+    epochs: 10  # Меньше эпох для быстрого тестирования
+    
+  mlflow:
+    tracking_uri: "sqlite:///mlflow_dev.db"
+    experiment_name: "ml_template_project_dev"
+
+# Переопределения для продакшена
+production:
+  logging:
+    level: "WARNING"
+    log_file: "logs/production.log"
+    
+  mlflow:
+    tracking_uri: "${MLFLOW_TRACKING_URI}"  # Из переменной окружения
+    experiment_name: "ml_template_project_prod"

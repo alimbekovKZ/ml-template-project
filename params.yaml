@@ -1,0 +1,137 @@
+# Глобальные параметры эксперимента
+experiment_name: "catboost_v1"
+random_seed: 42
+
+# Пути к директориям и файлам
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  data_features: "data/features"
+  models_experiments: "models/experiments"
+  models_production: "models/production"
+  reports_figures: "reports/figures"
+  reports_metrics: "reports/metrics"
+  configs: "configs"
+  logs: "logs"
+
+# Параметры данных
+data:
+  source_path: "data/external/raw_data.csv"
+  target_column: "target"
+  date_column: "the_date"
+  customer_id: "abs_customer"
+  filters:
+    min_disbursement: 500
+    max_date: "2024-07-31"
+    min_age: 18
+
+# Параметры предобработки
+preprocessing:
+  test_size: 0.2
+  val_size: 0.1
+  stratify: true
+  nan_threshold: 0.95
+  single_value_threshold: 0.99
+  date_format: "%Y-%m-%d"
+  date_column: "the_date"
+  target_column: "target"
+
+# Параметры feature engineering
+features:
+  categorical_encoding:
+    method: "frequency"  # frequency, target_encoding, one_hot
+    cumsum_freq: 0.995
+    handle_unknown: "ignore"
+  
+  numerical_scaling:
+    method: "standard"  # standard, minmax, robust
+    
+    
+  feature_selection:
+    enabled: true
+    method: "importance"  # importance, correlation, variance
+    top_k: 100
+
+# Параметры модели
+model:
+  type: "catboost"  # lightgbm, catboost, xgboost
+  
+  hyperparameters: # Model-specific hyperparameters
+    lightgbm:
+      objective: "binary"
+      metric: "auc"
+      boosting_type: "gbdt"
+      num_leaves: 31
+      learning_rate: 0.1
+      feature_fraction: 0.9
+      bagging_fraction: 0.8
+      bagging_freq: 5
+      verbose: -1
+    catboost:
+      # Example catboost params
+      iterations: 1000
+      learning_rate: 0.1
+      verbose: 100
+    
+# Параметры обучения
+training:
+  epochs: 1000
+  early_stopping: 100
+  cv_folds: 5
+  stratified: true
+  
+# Параметры оптимизации гиперпараметров
+hyperopt:
+  enabled: false
+  method: "bayesian"  # bayesian, grid, random
+  n_trials: 100
+  timeout: 3600
+  
+  search_space:
+    learning_rate: [0.01, 0.3]
+    num_leaves: [10, 100]
+    feature_fraction: [0.4, 1.0]
+    bagging_fraction: [0.4, 1.0]
+
+# Параметры оценки модели
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "auc"
+    - "log_loss"
+  
+  thresholds:
+    default: 0.5
+    optimal_metric: "f1"
+    
+  plots:
+    - "confusion_matrix"
+    - "roc_curve"
+    - "precision_recall_curve"
+    - "feature_importance"
+    - "shap_summary"
+
+# Параметры продвижения в продакшн
+promotion:
+  min_accuracy: 0.75
+  min_precision: 0.70
+  min_recall: 0.65
+  min_auc: 0.80
+  
+# Параметры логирования
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# Параметры для MLflow
+mlflow:
+  enabled: true
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_name: "ml_template_project"
+  auto_log: true
+  log_models: true
+  log_artifacts: true
+  artifact_location: "mlruns"  # Explicitly set artifact location for clarity
