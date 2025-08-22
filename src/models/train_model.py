@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Скрипт для обучения модели машинного обучения.
+Скрипт для обучения модели машинного обучения с поддержкой Hyperopt.
 Поддерживает CatBoost и XGBoost.
 """
 
@@ -12,13 +12,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
-# Импорты для моделей ML (с обработкой ошибок)
+# Импорты для моделей ML
 cb = None
 xgb = None
+hyperopt_available = False
 
 try:
     import catboost as cb
@@ -32,6 +33,13 @@ try:
 except ImportError:
     print("XGBoost не установлен")
 
+try:
+    from hyperopt import hp, fmin, tpe, Trials, STATUS_OK, space_eval
+    hyperopt_available = True
+    print("Hyperopt успешно импортирован")
+except ImportError:
+    print("Hyperopt не установлен - оптимизация гиперпараметров недоступна")
+
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
@@ -43,13 +51,21 @@ from utils.mlflow_utils import MLflowTracker, setup_mlflow_autolog
 
 
 class ModelTrainer:
-    """Класс для обучения моделей ML"""
+    """Класс для обучения моделей ML с поддержкой Hyperopt"""
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = setup_logger('ModelTrainer')
         self.model = None
         self.feature_importance = None
+        self.best_params = None
+        self.best_score = None
+        
+        # Данные для оптимизации
+        self.X_train = None
+        self.y_train = None
+        self.X_val = None
+        self.y_val = None
         
         # Инициализация MLflow tracker
         self.mlflow_tracker = MLflowTracker(config)
@@ -57,7 +73,7 @@ class ModelTrainer:
         # Настройка автоматического логирования
         if config.get('mlflow', {}).get('enabled', True):
             setup_mlflow_autolog(config['model']['type'])
-        
+    
     def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
         """Загрузка обработанных данных"""
         train_path = "data/features/train_features.csv"
@@ -86,12 +102,12 @@ class ModelTrainer:
         target_col = self.config['data']['target_column']
         date_col = self.config['data']['date_column']
         
-        # Колонки для исключения (целевая переменная, дата, id колонки)
+        # Колонки для исключения
         columns_to_exclude = [target_col]
         if date_col in train_df.columns:
             columns_to_exclude.append(date_col)
         
-        # Исключаем ID колонки если они есть
+        # Исключаем ID колонки
         id_columns = [col for col in train_df.columns if 'customer' in col.lower() or 'id' in col.lower()]
         columns_to_exclude.extend(id_columns)
         
@@ -101,47 +117,254 @@ class ModelTrainer:
         X_val = val_df.drop(columns=columns_to_exclude)
         y_val = val_df[target_col]
         
-        self.logger.info(f"Исключенные колонки: {columns_to_exclude}")
         self.logger.info(f"Количество признаков: {X_train.shape[1]}")
-        self.logger.info(f"Распределение целевой переменной в train: {y_train.value_counts(normalize=True).to_dict()}")
+        
+        # Сохраняем для использования в оптимизации
+        self.X_train = X_train
+        self.y_train = y_train
+        self.X_val = X_val
+        self.y_val = y_val
         
         return X_train, y_train, X_val, y_val
     
-    def create_model(self) -> Any:
-        """Создание модели в зависимости от типа"""
+    def create_hyperopt_space(self) -> dict:
+        """Создание пространства поиска для Hyperopt из конфигурации"""
+        hyperopt_config = self.config.get('hyperopt', {})
+        search_space = hyperopt_config.get('search_space', {})
         model_type = self.config['model']['type'].lower()
         
-        # Получаем параметры для конкретного типа модели из hyperparameters
+        space = {}
+        
+        if model_type == 'catboost':
+            # Пространство для CatBoost
+            if 'learning_rate' in search_space:
+                lr_range = search_space['learning_rate']
+                space['learning_rate'] = hp.uniform('learning_rate', lr_range[0], lr_range[1])
+            
+            if 'depth' in search_space:
+                depth_range = search_space.get('depth', [4, 10])
+                space['depth'] = hp.randint('depth', depth_range[0], depth_range[1] + 1)
+            
+            if 'l2_leaf_reg' in search_space:
+                l2_range = search_space.get('l2_leaf_reg', [1, 10])
+                space['l2_leaf_reg'] = hp.uniform('l2_leaf_reg', l2_range[0], l2_range[1])
+                
+            # Добавляем дефолтные параметры если пространство пустое
+            if not space:
+                space = {
+                    'learning_rate': hp.uniform('learning_rate', 0.01, 0.3),
+                    'depth': hp.randint('depth', 4, 11),
+                    'l2_leaf_reg': hp.uniform('l2_leaf_reg', 1, 10)
+                }
+                
+        elif model_type == 'xgboost':
+            # Пространство для XGBoost
+            if 'learning_rate' in search_space:
+                lr_range = search_space['learning_rate']
+                space['learning_rate'] = hp.uniform('learning_rate', lr_range[0], lr_range[1])
+            
+            if 'max_depth' in search_space:
+                depth_range = search_space.get('max_depth', [3, 10])
+                space['max_depth'] = hp.randint('max_depth', depth_range[0], depth_range[1] + 1)
+            
+            if 'subsample' in search_space:
+                subsample_range = search_space.get('subsample', [0.5, 1.0])
+                space['subsample'] = hp.uniform('subsample', subsample_range[0], subsample_range[1])
+            
+            if 'colsample_bytree' in search_space:
+                colsample_range = search_space.get('colsample_bytree', [0.5, 1.0])
+                space['colsample_bytree'] = hp.uniform('colsample_bytree', colsample_range[0], colsample_range[1])
+            
+            # Добавляем дефолтные параметры если пространство пустое
+            if not space:
+                space = {
+                    'learning_rate': hp.uniform('learning_rate', 0.01, 0.3),
+                    'max_depth': hp.randint('max_depth', 3, 11),
+                    'subsample': hp.uniform('subsample', 0.5, 1.0),
+                    'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1.0)
+                }
+        
+        # Для других поисковых параметров из конфигурации
+        for param, bounds in search_space.items():
+            if param not in space:
+                if isinstance(bounds, list) and len(bounds) == 2:
+                    if all(isinstance(x, int) for x in bounds):
+                        space[param] = hp.randint(param, bounds[0], bounds[1] + 1)
+                    else:
+                        space[param] = hp.uniform(param, bounds[0], bounds[1])
+        
+        return space
+    
+    def objective_function(self, params: dict) -> dict:
+        """Целевая функция для оптимизации Hyperopt"""
+        model_type = self.config['model']['type'].lower()
+        
+        # Преобразуем параметры (hp.randint возвращает float)
+        if 'depth' in params:
+            params['depth'] = int(params['depth'])
+        if 'max_depth' in params:
+            params['max_depth'] = int(params['max_depth'])
+        
+        # Создаем модель с текущими параметрами
+        if model_type == 'catboost' and cb is not None:
+            # Берем базовые параметры и обновляем их
+            base_params = self.config['model']['hyperparameters'].get('catboost', {}).copy()
+            base_params.update(params)
+            base_params['random_state'] = self.config['random_seed']
+            base_params['verbose'] = False
+            
+            model = cb.CatBoostClassifier(**base_params)
+            
+            # Обучение с early stopping
+            model.fit(
+                self.X_train, self.y_train,
+                eval_set=(self.X_val, self.y_val),
+                early_stopping_rounds=50,
+                verbose=False
+            )
+            
+        elif model_type == 'xgboost' and xgb is not None:
+            base_params = self.config['model']['hyperparameters'].get('xgboost', {}).copy()
+            base_params.update(params)
+            base_params['random_state'] = self.config['random_seed']
+            base_params['verbosity'] = 0
+            
+            model = xgb.XGBClassifier(**base_params)
+            model.fit(self.X_train, self.y_train)
+        else:
+            raise ValueError(f"Неподдерживаемый тип модели: {model_type}")
+        
+        # Оценка на валидации
+        val_pred_proba = model.predict_proba(self.X_val)[:, 1]
+        val_auc = roc_auc_score(self.y_val, val_pred_proba)
+        
+        # Логируем в MLflow каждую итерацию
+        if self.config.get('mlflow', {}).get('enabled', True):
+            import mlflow
+            with mlflow.start_run(nested=True):
+                mlflow.log_params(params)
+                mlflow.log_metric('val_auc', val_auc)
+        
+        # Hyperopt минимизирует, поэтому возвращаем отрицательный AUC
+        return {'loss': -val_auc, 'status': STATUS_OK}
+    
+    def optimize_hyperparameters(self) -> Tuple[dict, float]:
+        """Оптимизация гиперпараметров с помощью Hyperopt"""
+        if not hyperopt_available:
+            self.logger.warning("Hyperopt не установлен, используем параметры по умолчанию")
+            return None, None
+        
+        hyperopt_config = self.config.get('hyperopt', {})
+        
+        if not hyperopt_config.get('enabled', False):
+            self.logger.info("Оптимизация гиперпараметров отключена")
+            return None, None
+        
+        self.logger.info("Начинаем оптимизацию гиперпараметров...")
+        
+        # Создаем пространство поиска
+        space = self.create_hyperopt_space()
+        
+        if not space:
+            self.logger.warning("Пространство поиска пустое, пропускаем оптимизацию")
+            return None, None
+        
+        # Параметры оптимизации
+        n_trials = hyperopt_config.get('n_trials', 50)
+        
+        # Запускаем оптимизацию
+        trials = Trials()
+        
+        # Начинаем родительский MLflow run для оптимизации
+        self.mlflow_tracker.start_run(
+            run_name=f"hyperopt_{self.config['experiment_name']}",
+            tags={'stage': 'hyperparameter_optimization', 'optimizer': 'hyperopt'}
+        )
+        
+        try:
+            best = fmin(
+                fn=self.objective_function,
+                space=space,
+                algo=tpe.suggest,
+                max_evals=n_trials,
+                trials=trials,
+                verbose=True
+            )
+            
+            # Получаем лучшие параметры
+            best_params = space_eval(space, best)
+            
+            # Лучший скор (помним что мы минимизировали отрицательный AUC)
+            best_score = -min(trials.losses())
+            
+            self.logger.info(f"Лучший AUC: {best_score:.4f}")
+            self.logger.info(f"Лучшие параметры: {best_params}")
+            
+            # Логируем лучшие результаты
+            self.mlflow_tracker.log_params(best_params, prefix="best")
+            self.mlflow_tracker.log_metrics({'best_val_auc': best_score})
+            
+            # Сохраняем историю оптимизации
+            optimization_history = {
+                'best_params': best_params,
+                'best_score': best_score,
+                'n_trials': n_trials,
+                'all_results': [
+                    {'params': t['misc']['vals'], 'loss': t['result']['loss']} 
+                    for t in trials.trials
+                ]
+            }
+            
+            self.mlflow_tracker.log_dict_as_json(
+                optimization_history, 
+                "hyperopt_history.json", 
+                "optimization"
+            )
+            
+            return best_params, best_score
+            
+        finally:
+            self.mlflow_tracker.end_run()
+    
+    def create_model(self, params: Optional[dict] = None) -> Any:
+        """Создание модели с заданными параметрами"""
+        model_type = self.config['model']['type'].lower()
+        
+        # Получаем базовые параметры
         hyperparams = self.config['model']['hyperparameters']
         
         if model_type == 'catboost':
             if cb is None:
                 raise ImportError("CatBoost не установлен")
             
-            # Для CatBoost берем параметры напрямую из hyperparameters
-            params = hyperparams.get('catboost', hyperparams)
+            base_params = hyperparams.get('catboost', hyperparams).copy()
             
-            # Добавляем случайное состояние
-            params = params.copy()
-            params['random_state'] = self.config['random_seed']
+            # Обновляем параметрами из оптимизации если есть
+            if params:
+                base_params.update(params)
             
-            model = cb.CatBoostClassifier(**params)
-            
+            base_params['random_state'] = self.config['random_seed']
+            model = cb.CatBoostClassifier(**base_params)
             
         elif model_type == 'xgboost':
             if xgb is None:
                 raise ImportError("XGBoost не установлен")
             
-            params = hyperparams.get('xgboost', hyperparams)
-            params = params.copy()
-            params['random_state'] = self.config['random_seed']
+            base_params = hyperparams.get('xgboost', hyperparams).copy()
             
-            model = xgb.XGBClassifier(**params)
+            if params:
+                base_params.update(params)
+            
+            base_params['random_state'] = self.config['random_seed']
+            model = xgb.XGBClassifier(**base_params)
             
         else:
             raise ValueError(f"Неподдерживаемый тип модели: {model_type}")
-            
+        
         self.logger.info(f"Создана модель типа: {model_type}")
+        if params:
+            self.logger.info(f"С оптимизированными параметрами: {params}")
+        
         return model
     
     def train_with_cv(self, X_train: pd.DataFrame, y_train: pd.Series) -> Dict[str, float]:
@@ -170,15 +393,33 @@ class ModelTrainer:
                    X_val: pd.DataFrame, y_val: pd.Series) -> Dict[str, Any]:
         """Основное обучение модели"""
         
-        # Начинаем MLflow run
+        # Сначала оптимизируем гиперпараметры если включено
+        best_params, best_score = self.optimize_hyperparameters()
+        
+        # Сохраняем лучшие параметры
+        self.best_params = best_params
+        self.best_score = best_score
+        
+        # Начинаем MLflow run для финального обучения
+        run_name = f"{self.config['experiment_name']}_{self.config['model']['type']}"
+        if best_params:
+            run_name += "_optimized"
+            
         self.mlflow_tracker.start_run(
-            run_name=f"{self.config['experiment_name']}_{self.config['model']['type']}",
-            tags={'stage': 'training'}
+            run_name=run_name,
+            tags={
+                'stage': 'training',
+                'optimized': str(best_params is not None)
+            }
         )
         
         try:
             # Логируем параметры
             self.mlflow_tracker.log_params(self.config, "config")
+            
+            if best_params:
+                self.mlflow_tracker.log_params(best_params, "optimized_params")
+                self.mlflow_tracker.log_metrics({'hyperopt_best_auc': best_score})
             
             # Логируем информацию о данных
             data_info = {
@@ -190,7 +431,8 @@ class ModelTrainer:
             }
             self.mlflow_tracker.log_params(data_info, "data_info")
             
-            self.model = self.create_model()
+            # Создаем модель с лучшими параметрами
+            self.model = self.create_model(best_params)
             
             # Кросс-валидация
             cv_metrics = self.train_with_cv(X_train, y_train)
@@ -200,7 +442,6 @@ class ModelTrainer:
             model_type = self.config['model']['type'].lower()
             
             if model_type == 'catboost' and cb is not None:
-                # Для CatBoost используем eval_set и early stopping
                 self.model.fit(
                     X_train, y_train,
                     eval_set=(X_val, y_val),
@@ -208,7 +449,6 @@ class ModelTrainer:
                     verbose=False
                 )
             else:
-                # Для остальных моделей обычное обучение
                 self.model.fit(X_train, y_train)
             
             # Предсказания
@@ -249,7 +489,12 @@ class ModelTrainer:
             metrics = {
                 'cross_validation': cv_metrics,
                 'train': train_metrics,
-                'validation': val_metrics
+                'validation': val_metrics,
+                'hyperopt': {
+                    'enabled': best_params is not None,
+                    'best_params': best_params,
+                    'best_score': best_score
+                }
             }
             
             # Логируем общие метрики как JSON
@@ -333,6 +578,15 @@ class ModelTrainer:
             importance_path = f"{model_dir}/feature_importance.csv"
             self.feature_importance.to_csv(importance_path, index=False)
         
+        # Сохранение лучших параметров если есть
+        if self.best_params:
+            params_path = f"{model_dir}/best_params.json"
+            with open(params_path, 'w') as f:
+                json.dump({
+                    'best_params': self.best_params,
+                    'best_score': self.best_score
+                }, f, indent=2)
+        
         self.logger.info(f"Модель сохранена в {model_dir}")
 
 
@@ -342,6 +596,13 @@ def main():
     config = load_config()
     
     print(f"Тип модели для обучения: {config['model']['type']}")
+    
+    hyperopt_enabled = config.get('hyperopt', {}).get('enabled', False)
+    if hyperopt_enabled:
+        print(f"Оптимизация гиперпараметров: включена")
+        print(f"Количество итераций: {config.get('hyperopt', {}).get('n_trials', 50)}")
+    else:
+        print("Оптимизация гиперпараметров: отключена")
     
     # Создание тренера
     trainer = ModelTrainer(config)
@@ -353,7 +614,7 @@ def main():
         # Подготовка данных
         X_train, y_train, X_val, y_val = trainer.prepare_data(train_df, val_df)
         
-        # Обучение модели
+        # Обучение модели (с оптимизацией если включена)
         metrics = trainer.train_model(X_train, y_train, X_val, y_val)
         
         # Сохранение метрик
@@ -375,8 +636,13 @@ def main():
         # Завершаем MLflow run
         trainer.mlflow_tracker.end_run()
         
-        print(f"Обучение завершено. Эксперимент: {experiment_name}")
+        print(f"\nОбучение завершено. Эксперимент: {experiment_name}")
         print(f"Validation AUC: {metrics['validation']['auc']:.4f}")
+        
+        if metrics['hyperopt']['enabled']:
+            print(f"\nОптимизация гиперпараметров:")
+            print(f"Лучший AUC: {metrics['hyperopt']['best_score']:.4f}")
+            print(f"Лучшие параметры: {metrics['hyperopt']['best_params']}")
         
     except Exception as e:
         print(f"Ошибка при обучении модели: {e}")

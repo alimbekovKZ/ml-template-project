@@ -4,8 +4,8 @@ stages:
     cmd: python src/data/make_dataset.py
     deps:
     - path: params.yaml
-      md5: af8a38b00ad54cc5867b16cde6d06574
-      size: 2962
+      md5: cbf247d6815ff8b23a5a1ada5a931e14
+      size: 2968
     - path: src/data/make_dataset.py
       md5: 6a2c6f79ec24d6b414916b2ad7fc0b78
       size: 12153
@@ -27,8 +27,8 @@ stages:
       md5: 9fa21ce12d95fd2330af0b917e168705
       size: 129778
     - path: params.yaml
-      md5: af8a38b00ad54cc5867b16cde6d06574
-      size: 2962
+      md5: cbf247d6815ff8b23a5a1ada5a931e14
+      size: 2968
     - path: src/data/preprocessing.py
       md5: 2eb6207f5d9cc9206d0b41f4d288efec
       size: 19798
@@ -94,7 +94,7 @@ stages:
       md5: 616d3fb660203aaa2f1b11f3c333d5e7
       size: 814
     - path: data/features/sklearn_objects.pkl
-      md5: 40bc10bd110c9eea8c48f0a0945aaa6c
+      md5: 2e38c2191306339bf99d29e687addccb
       size: 1020
     - path: data/features/test_features.csv
       md5: f1e9af16b85e393230490998f4bab98d
@@ -138,11 +138,11 @@ stages:
       md5: e86bde154d98df6708bc4abb79fbe800
       size: 9783
     - path: params.yaml
-      md5: af8a38b00ad54cc5867b16cde6d06574
-      size: 2962
+      md5: cbf247d6815ff8b23a5a1ada5a931e14
+      size: 2968
     - path: src/models/train_model.py
-      md5: 75b3efffa255ff010536098c0b1c7e8b
-      size: 16610
+      md5: 8f95f788a8cedf215e354e18e2dd6b4e
+      size: 28863
     params:
       params.yaml:
         experiment_name: catboost_v1
@@ -168,14 +168,14 @@ stages:
       md5: 4ee9619f92c54b7ce082b3c353ba82b2
       size: 333
     - path: models/experiments/catboost_v1/model.pkl
-      md5: c30b26628d462fce4c7a225246016cb3
+      md5: 54043a4ecc61af23d56df185b7fa691c
       size: 25000
     - path: reports/figures/feature_importance.png
-      md5: bf114948a8e874bb9ddf1d58794f57ec
-      size: 114652
+      md5: e52ffe9cd0e89f182c70cc55f4ebea7c
+      size: 114520
     - path: reports/metrics/train_metrics.json
-      md5: 4c9d72759342683838021c5ce07634ab
-      size: 607
+      md5: bcc1ff2b96bf36ddb9f2e373621440ae
+      size: 703
   evaluate_model:
     cmd: python src/evaluation/evaluate_model.py
     deps:
@@ -183,11 +183,11 @@ stages:
       md5: f1e9af16b85e393230490998f4bab98d
       size: 19582
     - path: models/experiments/catboost_v1/model.pkl
-      md5: c30b26628d462fce4c7a225246016cb3
+      md5: 54043a4ecc61af23d56df185b7fa691c
       size: 25000
     - path: params.yaml
-      md5: af8a38b00ad54cc5867b16cde6d06574
-      size: 2962
+      md5: cbf247d6815ff8b23a5a1ada5a931e14
+      size: 2968
     - path: src/evaluation/evaluate_model.py
       md5: 614e111aa52abb8969dea2cd28d7f796
       size: 17980
@@ -212,8 +212,8 @@ stages:
       md5: 42220a4eadc673addc6bd06fc4d537f9
       size: 212180
     - path: reports/metrics/test_metrics.json
-      md5: 23510dd0aa5f19af1ab774fd516ce783
-      size: 1577
+      md5: d95a145012c9d55890a0c30b706fc194
+      size: 1569
   full_pipeline_with_mlflow:
     cmd: "echo \"Запуск полного ML пайплайна с MLflow трекингом...\"\ndvc repro evaluate_model\n\
       python scripts/compare_experiments.py\necho \"Пайплайн завершен. Проверьте MLflow\

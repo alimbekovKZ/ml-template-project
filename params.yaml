@@ -82,9 +82,9 @@ hyperopt:
   
   search_space:
     learning_rate: [0.01, 0.3]
-    num_leaves: [10, 100]
-    feature_fraction: [0.4, 1.0]
-    bagging_fraction: [0.4, 1.0]
+    # num_leaves: [10, 100]
+    # feature_fraction: [0.4, 1.0]
+    # bagging_fraction: [0.4, 1.0]
 
 # Параметры оценки модели
 evaluation:
