@@ -4,8 +4,8 @@ stages:
     cmd: python src/data/make_dataset.py
     deps:
     - path: params.yaml
-      md5: cbf247d6815ff8b23a5a1ada5a931e14
-      size: 2968
+      md5: 3d69a2a92330bd1517ad74e808348c74
+      size: 3002
     - path: src/data/make_dataset.py
       md5: 6a2c6f79ec24d6b414916b2ad7fc0b78
       size: 12153
@@ -27,8 +27,8 @@ stages:
       md5: 9fa21ce12d95fd2330af0b917e168705
       size: 129778
     - path: params.yaml
-      md5: cbf247d6815ff8b23a5a1ada5a931e14
-      size: 2968
+      md5: 3d69a2a92330bd1517ad74e808348c74
+      size: 3002
     - path: src/data/preprocessing.py
       md5: 2eb6207f5d9cc9206d0b41f4d288efec
       size: 19798
@@ -138,11 +138,11 @@ stages:
       md5: e86bde154d98df6708bc4abb79fbe800
       size: 9783
     - path: params.yaml
-      md5: cbf247d6815ff8b23a5a1ada5a931e14
-      size: 2968
+      md5: 3d69a2a92330bd1517ad74e808348c74
+      size: 3002
     - path: src/models/train_model.py
-      md5: 8f95f788a8cedf215e354e18e2dd6b4e
-      size: 28863
+      md5: 3330a318cf23f8e9b643088905922673
+      size: 30839
     params:
       params.yaml:
         experiment_name: catboost_v1
@@ -168,14 +168,14 @@ stages:
       md5: 4ee9619f92c54b7ce082b3c353ba82b2
       size: 333
     - path: models/experiments/catboost_v1/model.pkl
-      md5: 54043a4ecc61af23d56df185b7fa691c
+      md5: 3df857a0940edec303907ceacdfa97b3
       size: 25000
     - path: reports/figures/feature_importance.png
       md5: e52ffe9cd0e89f182c70cc55f4ebea7c
       size: 114520
     - path: reports/metrics/train_metrics.json
-      md5: bcc1ff2b96bf36ddb9f2e373621440ae
-      size: 703
+      md5: e4c22844147b95b2e711747a65ac08fa
+      size: 497
   evaluate_model:
     cmd: python src/evaluation/evaluate_model.py
     deps:
@@ -183,11 +183,11 @@ stages:
       md5: f1e9af16b85e393230490998f4bab98d
       size: 19582
     - path: models/experiments/catboost_v1/model.pkl
-      md5: 54043a4ecc61af23d56df185b7fa691c
+      md5: 3df857a0940edec303907ceacdfa97b3
       size: 25000
     - path: params.yaml
-      md5: cbf247d6815ff8b23a5a1ada5a931e14
-      size: 2968
+      md5: 3d69a2a92330bd1517ad74e808348c74
+      size: 3002
     - path: src/evaluation/evaluate_model.py
       md5: 614e111aa52abb8969dea2cd28d7f796
       size: 17980

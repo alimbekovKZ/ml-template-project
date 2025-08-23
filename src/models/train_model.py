@@ -367,9 +367,18 @@ class ModelTrainer:
         
         return model
     
-    def train_with_cv(self, X_train: pd.DataFrame, y_train: pd.Series) -> Dict[str, float]:
+    def train_with_cv(self, X_train: pd.DataFrame, y_train: pd.Series) -> Optional[Dict[str, float]]:
         """Обучение с кросс-валидацией"""
+        # Проверяем флаг кросс-валидации
+        enable_cv = self.config['training'].get('enable_cross_validation', True)
+        
+        if not enable_cv:
+            self.logger.info("Кросс-валидация отключена в конфигурации")
+            return None
+            
         cv_folds = self.config['training']['cv_folds']
+        
+        self.logger.info(f"Запуск кросс-валидации с {cv_folds} фолдами...")
         
         if self.config['training']['stratified']:
             cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=self.config['random_seed'])
@@ -405,11 +414,15 @@ class ModelTrainer:
         if best_params:
             run_name += "_optimized"
             
+        # Добавляем информацию о кросс-валидации в теги
+        enable_cv = self.config['training'].get('enable_cross_validation', True)
+        
         self.mlflow_tracker.start_run(
             run_name=run_name,
             tags={
                 'stage': 'training',
-                'optimized': str(best_params is not None)
+                'optimized': str(best_params is not None),
+                'cross_validation': str(enable_cv)
             }
         )
         
@@ -434,12 +447,19 @@ class ModelTrainer:
             # Создаем модель с лучшими параметрами
             self.model = self.create_model(best_params)
             
-            # Кросс-валидация
+            # Кросс-валидация (если включена)
             cv_metrics = self.train_with_cv(X_train, y_train)
-            self.mlflow_tracker.log_metrics(cv_metrics, step=0)
+            
+            if cv_metrics:
+                self.mlflow_tracker.log_metrics(cv_metrics, step=0)
+                self.logger.info("Кросс-валидация выполнена успешно")
+            else:
+                self.logger.info("Кросс-валидация пропущена")
             
             # Обучение на полной обучающей выборке
             model_type = self.config['model']['type'].lower()
+            
+            self.logger.info("Начинаем финальное обучение модели...")
             
             if model_type == 'catboost' and cb is not None:
                 self.model.fit(
@@ -450,6 +470,8 @@ class ModelTrainer:
                 )
             else:
                 self.model.fit(X_train, y_train)
+            
+            self.logger.info("Финальное обучение завершено")
             
             # Предсказания
             train_pred = self.model.predict_proba(X_train)[:, 1]
@@ -494,7 +516,8 @@ class ModelTrainer:
                     'enabled': best_params is not None,
                     'best_params': best_params,
                     'best_score': best_score
-                }
+                },
+                'cross_validation_enabled': enable_cv
             }
             
             # Логируем общие метрики как JSON
@@ -597,6 +620,12 @@ def main():
     
     print(f"Тип модели для обучения: {config['model']['type']}")
     
+    # Проверяем статус кросс-валидации
+    cv_enabled = config['training'].get('enable_cross_validation', True)
+    print(f"Кросс-валидация: {'включена' if cv_enabled else 'отключена'}")
+    if cv_enabled:
+        print(f"Количество фолдов: {config['training'].get('cv_folds', 5)}")
+    
     hyperopt_enabled = config.get('hyperopt', {}).get('enabled', False)
     if hyperopt_enabled:
         print(f"Оптимизация гиперпараметров: включена")
@@ -638,6 +667,12 @@ def main():
         
         print(f"\nОбучение завершено. Эксперимент: {experiment_name}")
         print(f"Validation AUC: {metrics['validation']['auc']:.4f}")
+        
+        if cv_enabled and metrics['cross_validation']:
+            print(f"Cross-validation AUC: {metrics['cross_validation']['cv_auc_mean']:.4f} "
+                  f"(+/- {metrics['cross_validation']['cv_auc_std']*2:.4f})")
+        elif not cv_enabled:
+            print("Кросс-валидация была пропущена")
         
         if metrics['hyperopt']['enabled']:
             print(f"\nОптимизация гиперпараметров:")

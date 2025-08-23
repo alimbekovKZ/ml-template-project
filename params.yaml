@@ -72,6 +72,7 @@ training:
   early_stopping: 100
   cv_folds: 5
   stratified: true
+  enable_cross_validation: false
   
 # Параметры оптимизации гиперпараметров
 hyperopt:
